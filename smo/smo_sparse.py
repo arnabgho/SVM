@@ -1,26 +1,28 @@
 import numpy as np
 from random import randint
 #import cvxopt
-
+from collections import Counter
 
 
 num_vectors=0
 num_dimensions=0
-point=np.zeros(1,float)
-target=np.zeros(1,float)
-alpha=np.zeros(1,float)
-target=np.zeros(1,float)
+point=[{}]
+target=[]
+alpha={}
 C=0
 eps=0
 kernel_type='linear'
 b=0
-omega=np.zeros(1,float)
+omega={}
 num_zero=0
 num_C=0
 
 def kernel(x,y):
 	if kernel_type=='linear':
-		return np.dot(x,y)
+		val=0.0
+		for i in x.keys():
+			val+=x.get(i,0)*y.get(i,0)
+		return val	
 
 def get_training_accuracy():
 		correct=0.0
@@ -49,14 +51,18 @@ def init(data_in,target_in,kernel_type_in=None,C_in=None,eps_in=None):
 	global kernel_type
 	global b
 	global omega
-	num_vectors=data_in.shape[0]
-	num_dimensions=data_in.shape[1]
-	omega=np.zeros(num_dimensions,float)
+	num_vectors=len(data_in)
 	point=data_in
 	target=target_in
-	alpha=np.zeros(num_vectors,float)
 	num_zero=num_vectors
 	num_C=0
+	for i in xrange(num_vectors):
+		num_dimensions=max(num_dimensions,max(data_in[i]))
+
+	for i in xrange(num_dimensions):		
+		omega[i]=0
+		alpha[i]=0
+	
 
 	if kernel_type_in is None:
 		kernel_type='linear'
@@ -67,7 +73,7 @@ def init(data_in,target_in,kernel_type_in=None,C_in=None,eps_in=None):
 	else:	
 		C=C_in
 	if eps is None:
-		eps=1e-5
+		eps=1e-3
 	else:	
 		eps=eps_in
 
@@ -75,7 +81,7 @@ def f(z):
 	ans=-b
 	# for i in xrange(num_vectors):
 		# ans+=alpha[i]*kernel(point[i],z)
-	ans+=np.dot(omega,z)	
+	ans+=kernel(omega,z)	
 	return ans
 
 def get_b1(i,j,Ei,Ej,b,a1,a2,alph1,alph2):
@@ -143,8 +149,22 @@ def takeStep( i1,i2 ):
 	else:
 		a1_L=alph1+s*(alph2-L)
 		a1_H=alph1+s*(alph2-H)
-		omega_L=omega+y1*(a1_L-alph1)*point[i1]+y2*(L-alph2)*point[i2]
-		omega_H=omega+y1*(a1_H-alph1)*point[i1]+y2*(H-alph2)*point[i2]
+		# omega_L=omega+y1*(a1_L-alph1)*point[i1]+y2*(L-alph2)*point[i2]
+		# omega_H=omega+y1*(a1_H-alph1)*point[i1]+y2*(H-alph2)*point[i2]
+		point_i1_L_a1=point[i1]
+		point_i1_L_a1.update((x, y*y1*(a1_L-alph1)) for x, y in point_i1_L_a1.items())
+		point_i1_L_a2=point[i2]
+		point_i1_L_a2.update((x, y*y2*(L-alph2)) for x, y in point_i1_L_a2.items())
+
+		point_i1_H_a1=point[i1]
+		point_i1_H_a1.update((x, y*y1*(a1_H-alph1)) for x, y in point_i1_H_a1.items())
+		point_i1_H_a2=point[i2]
+		point_i1_H_a2.update((x, y*y2*(H-alph2)) for x, y in point_i1__a2.items())
+
+
+		omega_L=dict(Counter(omega)+Counter(point_i1_L_a1)+Counter(point_i1_L_a2))
+		omega_H=dict(Counter(omega)+Counter(point_i1_H_a1)+Counter(point_i1_H_a2))
+
 		alpha_L=alpha
 		alpha_L[i1]=a1_L
 		alpha_L[i2]=L
@@ -174,7 +194,20 @@ def takeStep( i1,i2 ):
 	b1=get_b1(i1,i2,E1,E2,b,a1,a2,alph1,alph2)
 	b2=get_b2(i1,i2,E1,E2,b,a1,a2,alph1,alph2)
 	b=get_b( b1 , b2  , i1, i2 )
-	omega=omega+y1*(a1-alph1)*point[i1]+y2*(a2-alph2)*point[i2]
+
+
+
+	# omega=omega+y1*(a1-alph1)*point[i1]+y2*(a2-alph2)*point[i2]
+
+	point_i1=point[i1]
+	point_i1.update((x, y*y1*(a1-alph1)) for x, y in point_i1.items())
+
+	point_i2=point[i2]
+	point_i2.update((x, y*y2*(a2-alph2)) for x, y in point_i2.items())
+
+
+	omega=dict(Counter(omega) + Counter(point_i1) + Counter(point_i2) )
+
 	alpha[i1]=a1
 	alpha[i2]=a2
 
@@ -200,7 +233,7 @@ def takeStep( i1,i2 ):
 	return 1 
 
 def compute_objective_function( omega , alpha ):
-	obj=-0.5*np.dot(omega,omega)
+	obj=-0.5*kernel(omega,omega)
 	for a in alpha:
 		obj+=a
 	return obj	
