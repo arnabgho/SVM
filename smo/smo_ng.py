@@ -56,10 +56,10 @@ class smo:
 			return new_alpha_j
 
 	def get_b1(self,i,j,Ei,Ej,b):
-		return self.b-Ei-self.y[i]*( self.alpha[i]-self.alpha_i_old )*self.compute_kernel(self.x[i],self.x[j])-self.y[j]*(self.alpha[j]-self.alpha_j_old)*self.compute_kernel(self.x[i],self.x[j])
+		return self.b-Ei-self.y[i]*( self.alpha[i]-self.alpha_i_old )*self.compute_kernel(self.x[i],self.x[i])-self.y[j]*(self.alpha[j]-self.alpha_j_old)*self.compute_kernel(self.x[i],self.x[j])
 
 	def get_b2(self,i,j,Ei,Ej,b):
-		return self.b-Ej-self.y[i]*( self.alpha[i]-self.alpha_i_old )*self.compute_kernel(self.x[i],self.x[j])-self.y[j]*(self.alpha[j]-self.alpha_j_old)*self.compute_kernel(self.x[i],self.x[j])
+		return self.b-Ej-self.y[i]*( self.alpha[i]-self.alpha_i_old )*self.compute_kernel(self.x[i],self.x[j])-self.y[j]*(self.alpha[j]-self.alpha_j_old)*self.compute_kernel(self.x[j],self.x[j])
 
 	def get_b( self , b1 , b2  , i, j ) :
 		if	(0<self.alpha[i] and self.alpha[i]<self.C) :
@@ -73,15 +73,12 @@ class smo:
 		ans=self.b
 		for i in xrange(self.num_vectors):
 			ans+=self.alpha[i]*self.compute_kernel(self.x[i],z)
-		if ans>=0:	
-			return 1
-		else:
-			return -1
+		return ans
 
 	def get_training_accuracy(self):
 		correct=0.0
 		for i in xrange(self.num_vectors):
-			if self.f(self.x[i])==self.y[i]:
+			if self.f(self.x[i])*self.y[i]>=0:
 				correct+=1.0
 		return 	correct/self.num_vectors
 
