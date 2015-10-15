@@ -22,7 +22,7 @@ omega=np.zeros(1,float)
 num_zero=0
 num_C=0
 working_set_indices=[]
-max_iter=1000
+max_iter=2
 all_indices=[]
 
 def init(data_in,target_in,kernel_type_in=None,C_in=None,eps_in=None,max_iter_in=None):
@@ -39,6 +39,8 @@ def init(data_in,target_in,kernel_type_in=None,C_in=None,eps_in=None,max_iter_in
 	global omega
 	global working_set_indices
 	global point_matrix
+	global all_indices
+	global max_iter
 
 	num_vectors=data_in.shape[0]
 	num_dimensions=data_in.shape[1]
@@ -47,6 +49,10 @@ def init(data_in,target_in,kernel_type_in=None,C_in=None,eps_in=None,max_iter_in
 	target=target_in
 	alpha=np.zeros(num_vectors,float)
 	point_matrix=matrix(point)
+	all_indices=range(num_vectors)
+
+	print "all_indices"
+	print all_indices
 	if kernel_type_in is None:
 		kernel_type='linear'
 	else:
@@ -71,7 +77,7 @@ def kernel(x,y):
 
 def compute_kernel_matrix():
 	global K
-	global H
+	global D
 	K=D=np.diag(np.ones(num_vectors))
 	for i in xrange(num_vectors):
 		for j in xrange(i,num_vectors):
@@ -99,7 +105,7 @@ def compute_omega():
 	omega= np.array(matrix(alpha).T*point_matrix)
 	return omega
 
-def f():
+def f(z):
 	return np.dot(omega,z)
 
 def check_stopping_criteria():
@@ -139,7 +145,7 @@ def clean_working_set():
 	if len(working_set_indices)/2==0 :
 		num_picked=10
 	else:
-		num_picked=working_set_indices/2
+		num_picked=len(working_set_indices)/2
 
 	for i in xrange(min(num_picked,len(violators))):
 		working_set_indices_new.append(violators[i][1])	
@@ -160,34 +166,40 @@ def driver():
 		K_B=K[working_set_indices,]
 		K_BB=K_B[:,working_set_indices]
 		K_BN=K_B[:,rest_indices]
+
 		D_B=D[working_set_indices,]
 		D_BB=D_B[:,working_set_indices]
 		D_BN=D_B[:,rest_indices]
+		
 		alpha_y_N=alpha_N*y_N
-		Q_BN=np.array(matrix(alpha_y_N).T*matrix(K_BN))
+		Q_BN=np.array(matrix(alpha_y_N).T*matrix(K_BN).T)
 		Q_BN=Q_BN*y_B
 		ones=np.ones(Q_BN.size)
 		P=cvxopt.matrix(D_BB)
 		q=cvxopt.matrix((Q_BN-ones).T)
 
-		print D_BB
+
+		print "working_set_indices"
+		print working_set_indices
+
+		# print D_BB
 
 
-		
-		size_B=y_B.size
-		size_N=y_N.size
-		G_std = cvxopt.matrix(np.diag(np.ones(size_B) * -1))
-		h_std = cvxopt.matrix(np.zeros(size_B))
-		G_slack = cvxopt.matrix(np.diag(np.ones(size_B)))
-		h_slack = cvxopt.matrix(np.ones(size_B) * C)
-		G = cvxopt.matrix(np.vstack((G_std, G_slack)))
-		h = cvxopt.matrix(np.vstack((h_std, h_slack)))
-		A = cvxopt.matrix(y_B, (1, size_B))
-		b = cvxopt.matrix(-np.dot(alpha_N,y_N))
-		solution = cvxopt.solvers.qp(P, q, G, h, A, b)
-		alpha_B_new=solution['x']
-		alpha[working_set_indices,]=alpha_B_new
-		compute_omega()
-		converged=check_stopping_criteria()
 
+		# size_B=y_B.size
+		# size_N=y_N.size
+		# G_std = cvxopt.matrix(np.diag(np.ones(size_B) * -1))
+		# h_std = cvxopt.matrix(np.zeros(size_B))
+		# G_slack = cvxopt.matrix(np.diag(np.ones(size_B)))
+		# h_slack = cvxopt.matrix(np.ones(size_B) * C)
+		# G = cvxopt.matrix(np.vstack((G_std, G_slack)))
+		# h = cvxopt.matrix(np.vstack((h_std, h_slack)))
+		# A = cvxopt.matrix(y_B, (1, size_B))
+		# b = cvxopt.matrix(-np.dot(alpha_N,y_N))
+		# solution = cvxopt.solvers.qp(P, q, G, h, A, b)
+		# alpha_B_new=solution['x']
+		# alpha[working_set_indices,]=alpha_B_new
+		# compute_omega()
+		# converged=check_stopping_criteria()
+		# iter+=1
 	print "converged\n"	
