@@ -16,6 +16,7 @@ b=0
 omega={}
 num_zero=0
 num_C=0
+stopping_criteria=1
 
 def kernel(x,y):
 	if kernel_type=='linear':
@@ -27,7 +28,7 @@ def kernel(x,y):
 def get_training_accuracy():
 		correct=0.0
 		for i in xrange(num_vectors):
-			if ( f(point[i])>=0 and target[i]==1 ) or (f(point[i])<0 and target[i]==-1  )>=0:
+			if ( f(point[i])>=0 and target[i]==1 ) or (f(point[i])<0 and target[i]==-1  ):
 				correct+=1.0
 		return 	correct/num_vectors
 
@@ -35,11 +36,14 @@ def get_test_accuracy(test_x,test_y):
 	num_vectors_test=len(test_x)
 	correct=0.0
 	for i in xrange(num_vectors_test):
-		if ( f(test_x[i])>=0.0 and test_y[i]==1 ) or (f(test_x[i])<0 and test_y[i]==-1  ) :
+		if ( f(test_x[i])>=0 and test_y[i]==1 ) or (f(test_x[i])<0 and test_y[i]==-1  ) :
 			correct+=1.0
 	return correct/num_vectors_test		
 
-def init(data_in,target_in,kernel_type_in=None,C_in=None,eps_in=None):
+
+
+
+def init(data_in,target_in,kernel_type_in=None,C_in=None,eps_in=None,stopping_criteria_in=None):
 	global num_vectors
 	global num_dimensions
 	global point
@@ -76,7 +80,10 @@ def init(data_in,target_in,kernel_type_in=None,C_in=None,eps_in=None):
 		eps=1e-3
 	else:	
 		eps=eps_in
-
+	if stopping_criteria_in is None:
+		stopping_criteria=1
+	else:
+		stopping_criteria=stopping_criteria_in		
 def f(z):	
 	ans=-b
 	# for i in xrange(num_vectors):
@@ -98,6 +105,84 @@ def get_b( b1 , b2  , i, j ) :
 		return b2
 	else:
 		return 0.5*(b1+b2)
+
+def compute_gradient():
+	gradient=[]
+	for x,y in zip(point,target):
+		tot=0
+		for x_dash,y_dash,alph in zip(point,target,alpha):
+			tot+=alph*y*y_dash*kernel(x,x_dash)
+		gradient.append(tot-1)	
+	return gradient	
+
+def get_diff(index):
+	if abs(alpha[index]-C)<=eps:
+		return 1-target[i]*f(x)
+	else:
+		return 0	
+
+def generate_I_vectors():
+	I_pos=[]
+	I_neg=[]
+	gradient=compute_gradient()
+
+	for i in range(num_vectors):
+		y=target[i]
+		g_Ld=gradient[i]
+		alph=alpha[i]
+		x=point[i]
+		val=-y*g_Ld
+
+		if (alph<C and y==1) or (alph==C and y==-1):
+			I_pos.append(val)
+		elif (alph<C and y==-1) or (alph==C and y==1):
+			I_neg.append(val)
+	
+	return 	I_pos,I_neg	
+
+def check_stopping_criteria():
+	if stopping_criteria is 1:
+		sum_alph_y=0
+		for i in xrange(num_vectors):
+			y=target[i]
+			alph=alpha[i]
+			E=f(point[i]) - y
+			r=E*y
+			sum_alph_y+=alph*y
+			if (alph<0 or alph>C):
+				return False
+
+			if (not( (r>=-eps and abs(alph)<eps ) or ( abs(r)<eps and alph>0 and alph<C )  or ( r<=eps and abs(alph-C)<eps ) )):
+				return False	
+			# if ((r < -eps and alph<C  ) or ( r>eps and alph>0  )  ) :
+			# 	return False
+		if abs(sum_alph_y)>eps:
+			return False	
+		return True
+
+	elif stopping_criteria is 2:
+		alpha_sum=0
+		x_sum=0
+		for i in range(num_vectors):
+			alpha_sum+=alpha[i]
+			x_sum+=get_diff(i)
+		Ld=np.dot(np.dot(alpha.T,D),alpha)-alpha_sum
+		val=(2*Ld)+alpha_sum-c*xi_sum
+		if(abs(val)>eps):
+			return False	
+		return True
+
+	elif stopping_criteria is 3:		
+		I_pos,I_neg=generate_I_vectors()
+		I_pos.sort(reverse=True)
+		I_neg.sort()
+		m=I_pos[0]
+		M=I_neg[0]
+		if(m>M):
+			return False
+		return True	
+	else:
+		return True		
 
 def takeStep( i1,i2 ):
 	global num_vectors
@@ -159,7 +244,7 @@ def takeStep( i1,i2 ):
 		point_i1_H_a1=point[i1]
 		point_i1_H_a1.update((x, y*y1*(a1_H-alph1)) for x, y in point_i1_H_a1.items())
 		point_i1_H_a2=point[i2]
-		point_i1_H_a2.update((x, y*y2*(H-alph2)) for x, y in point_i1__a2.items())
+		point_i1_H_a2.update((x, y*y2*(H-alph2)) for x, y in point_i1_H_a2.items())
 
 
 		omega_L=dict(Counter(omega)+Counter(point_i1_L_a1)+Counter(point_i1_L_a2))
@@ -256,7 +341,8 @@ def examineExample( i2  ):
 	alph2=alpha[i2]
 	E2=f(point[i2]) - y2
 	r2=E2*y2
-	if ((r2 < -eps and alph2<C  ) or ( r2>eps and alph2>0  )  ) :
+	# if ((r2 < -eps and alph2<C  ) or ( r2>eps and alph2>0  )  ) :
+	if(not check_stopping_criteria()):
 		if ( num_vectors - num_zero - num_C >1  ) :
 			i1=second_choice_heuristic(i2,E2)
 			if takeStep(i1,i2):

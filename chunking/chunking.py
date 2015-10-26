@@ -24,8 +24,9 @@ num_C=0
 working_set_indices=[]
 max_iter=2
 all_indices=[]
+stopping_criteria=1
 
-def init(data_in,target_in,kernel_type_in=None,C_in=None,eps_in=None,max_iter_in=None):
+def init(data_in,target_in,kernel_type_in=None,C_in=None,eps_in=None,max_iter_in=None,stopping_criteria_in=None):
 	global num_vectors
 	global num_dimensions
 	global point
@@ -65,14 +66,25 @@ def init(data_in,target_in,kernel_type_in=None,C_in=None,eps_in=None,max_iter_in
 	else:	
 		eps=eps_in
 	if max_iter_in is None:
-		max_iter=50
+		max_iter=500
 	else:
 		max_iter=max_iter_in
+	if stopping_criteria_in is None:
+		stopping_criteria=1
+	else:
+		stopping_criteria=stopping_criteria_in	
 	compute_kernel_matrix()	
 
 def kernel(x,y):
 	if kernel_type=='linear':
 		return np.dot(x,y)
+	elif kernel_type == 'gaussian':
+		exponent = -np.sqrt(la.norm(x-y) ** 2 / (2 * sigma ** 2))
+		return np.exp(exponent)
+	elif kernel_type == 'poly':
+		return (offset + np.dot(x, y)) ** dimension
+	elif kernel_type == 'tanh':
+		return np.inner(x, y)	
 
 def compute_kernel_matrix():
 	global K
@@ -110,16 +122,83 @@ def compute_omega():
 def f(z):
 	return np.dot(omega,z)+b
 
-def check_stopping_criteria():
-	for i in xrange(num_vectors):
-		y=target[i]
-		alph=alpha[i]
-		E=f(point[i]) - y
-		r=E*y
-		if ((r < -eps and alph<C  ) or ( r>eps and alph>0  )  ) :
-			return False
-	return True
+def compute_gradient():
+	gradient=[]
+	for x,y in zip(point,target):
+		tot=0
+		for x_dash,y_dash,alph in zip(point,target,alpha):
+			tot+=alph*y*y_dash*kernel(x,x_dash)
+		gradient.append(tot-1)	
+	return gradient	
 
+def get_diff(index):
+	if abs(alpha[index]-C)<=eps:
+		return 1-target[i]*f(x)
+	else:
+		return 0	
+
+def generate_I_vectors():
+	I_pos=[]
+	I_neg=[]
+	gradient=compute_gradient()
+
+	for i in range(num_vectors):
+		y=target[i]
+		g_Ld=gradient[i]
+		alph=alpha[i]
+		x=point[i]
+		val=-y*g_Ld
+
+		if (alph<C and y==1) or (alph==C and y==-1):
+			I_pos.append(val)
+		elif (alph<C and y==-1) or (alph==C and y==1):
+			I_neg.append(val)
+	
+	return 	I_pos,I_neg	
+
+def check_stopping_criteria():
+	if stopping_criteria is 1:
+		sum_alph_y=0
+		for i in xrange(num_vectors):
+			y=target[i]
+			alph=alpha[i]
+			E=f(point[i]) - y
+			r=E*y
+			sum_alph_y+=alph*y
+			if (alph<0 or alph>C):
+				return False
+
+			if (not( (r>=-eps and abs(alph)<eps ) or ( abs(r)<eps and alph>0 and alph<C )  or ( r<=eps and abs(alph-C)<eps ) )):
+				return False	
+			# if ((r < -eps and alph<C  ) or ( r>eps and alph>0  )  ) :
+			# 	return False
+		if abs(sum_alph_y)>eps:
+			return False	
+		return True
+
+	elif stopping_criteria is 2:
+		alpha_sum=0
+		x_sum=0
+		for i in range(num_vectors):
+			alpha_sum+=alpha[i]
+			x_sum+=get_diff(i)
+		Ld=np.dot(np.dot(alpha.T,D),alpha)-alpha_sum
+		val=(2*Ld)+alpha_sum-c*xi_sum
+		if(abs(val)>eps):
+			return False	
+		return True
+
+	elif stopping_criteria is 3:		
+		I_pos,I_neg=generate_I_vectors()
+		I_pos.sort(reverse=True)
+		I_neg.sort()
+		m=I_pos[0]
+		M=I_neg[0]
+		if(m>M):
+			return False
+		return True	
+	else:
+		return True	
 
 def compute_gram_matrix(X):
 	n,d=X.shape
@@ -151,19 +230,12 @@ def solve_QP(X,Y):
     # solvers.options['show_progress'] = qpProgressOut
 
 	solution = solvers.qp(P, q, G, h, A, b)
-	print "QP Solution"
-	print solution['x']    # solution = solvers.qp(P, q, G_slack, h_slack, A, b)
+	# print "QP Solution"
+	# print solution['x']    # solution = solvers.qp(P, q, G_slack, h_slack, A, b)
 	return np.ravel(solution['x'])	# returns alpha
 
 def solve_subset(X,Y):
 	n,d=X.shape
-
-	print "X dtype"
-	print X.dtype
-
-	print "Y dtype"
-	print Y.dtype
-
 	alpha_subset=solve_QP(X,Y)
 	omega_subset =np.zeros(d)
 	b_subset=0.0
@@ -191,33 +263,31 @@ def clean_working_set():
 	
 	violators=[]
 	for i in rest_indices:
-		print "y"
-		print target[i]
 		y=target[i]
 		alph=alpha[i]
 		E=f(point[i]) - y
-		print "E"
-		print E
 		r=E*y
-		if(abs(alph)<eps and r<0):
-			violators.append((abs(E),i))
-		elif(abs(alph-C)<eps and r>0):
-			violators.append((abs(E),i))
-		elif(abs(alph)>eps and abs(alph)<C-eps) and r>eps:
-			violators.append((abs(E),i))
-	
+		# if(abs(alph)<eps and r<0):
+		# 	violators.append((abs(E),i))
+		# elif(abs(alph-C)<eps and r>0):
+		# 	violators.append((abs(E),i))
+		# elif(abs(alph)>eps and abs(alph)<C-eps) and r>eps:
+		# 	violators.append((abs(E),i))
+		if(r<0):
+			violators.append((abs(r),i))
 	violators.sort(key=lambda tup: tup[1],reverse=True)		
 
-	print "violators"
-	print violators
+	# print "violators"
+	# print violators
 
 	num_picked=0
 	if len(working_set_indices)/2==0 :
-		num_picked=4
+		num_picked=10
 	else:
 		num_picked=len(working_set_indices)/2
 
 	for i in xrange(min(num_picked,len(violators))):
+	# for i in xrange(len(violators)):
 		working_set_indices_new.append(violators[i][1])	
 	working_set_indices=working_set_indices_new	
 
@@ -268,23 +338,23 @@ def driver():
 		q=cvxopt.matrix((Q_BN-ones).T)
 
 
-		print "D_BB"
-		print D_BB
+		# print "D_BB"
+		# print D_BB
 
-		print "y_B"
-		print y_B
+		# print "y_B"
+		# print y_B
 
-		print "K_BB"
-		print K_BB
+		# print "K_BB"
+		# print K_BB
 
-		print "Q_BN"
-		print Q_BN
+		# print "Q_BN"
+		# print Q_BN
 
-		print "working_set_indices"
-		print working_set_indices
+		# print "working_set_indices"
+		# print working_set_indices
 
-		print "omega"
-		print omega.sum()
+		# print "omega"
+		# print omega.sum()
 		# print D_BB
 
 
@@ -298,13 +368,13 @@ def driver():
 		G = cvxopt.matrix(np.vstack((G_std, G_slack)))
 		h = cvxopt.matrix(np.vstack((h_std, h_slack)))
 		A = cvxopt.matrix(y_B, (1, size_B))
-		# B = cvxopt.matrix(-np.dot(alpha_N,y_N))
-		B = cvxopt.matrix(0.0)
+		B = cvxopt.matrix(-np.dot(alpha_N,y_N))
+		# B = cvxopt.matrix(0.0)
 		solution = cvxopt.solvers.qp(P, q, G, h, A, B)
 		alpha_B_new=solution['x']
 
-		print "solution"
-		print alpha_B_new
+		# print "solution"
+		# print alpha_B_new
 
 		alpha[working_set_indices,]=alpha_B_new
 		compute_omega()

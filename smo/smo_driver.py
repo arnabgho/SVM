@@ -19,3 +19,6 @@ def drive_smo(  train_filename , test_filename,kernel_type_in=None,C_in=None,eps
 
 	print "Testing Accuracy:\n"
 	print get_test_accuracy(test_x,test_y)
+
+if __name__ == '__main__':
+	drive_smo("../data/leu","../data/leu.t")	

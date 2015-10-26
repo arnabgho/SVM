@@ -7,7 +7,7 @@ def drive_chunking(  train_filename , test_filename,kernel_type_in=None,C_in=Non
 	# if C_in is None:
 	# 	C_in=1
 	if eps_in is None:
-	 	eps_in=1e-1
+	 	eps_in=1e-5
 	if kernel_type_in is None:
 	 	kernel_type_in='linear'
 	
